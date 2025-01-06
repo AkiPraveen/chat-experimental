@@ -36,6 +36,10 @@ export class Chat extends DurableObject {
 
    // Triggered whenever the client disconnects (e.g. closes the browser)
    async webSocketClose(ws: WebSocket) {
+    this.broadcastMessage({
+        text: `a member has disconnected`,
+        type: 'system',
+    })
     ws.close()
    }
 
