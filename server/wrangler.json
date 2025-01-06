@@ -1,0 +1,24 @@
+{
+    "name": "chat-experimental",
+    "main": "src/index.ts",
+    "compatibility_date": "2025-01-04",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_classes": [
+                "Chat"
+            ]
+        }
+    ],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "CHATS",
+                "class_name": "Chat"
+            }
+        ]
+    }
+}
