@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { ChannelList } from "@/components/channel-list";
 import { NameDialog } from "@/components/name-dialog";
 import { User } from "lucide-react";
+import { getUserColor } from "@/lib/colors";
 
 interface Message {
   type: "system" | "user";
@@ -180,8 +181,13 @@ export default function Home() {
                       className={`rounded-lg p-2 ${
                         message.type === "system"
                           ? "bg-muted font-medium"
-                          : "bg-primary/10"
+                          : ""
                       }`}
+                      style={
+                        message.type === "system"
+                          ? {}
+                          : { backgroundColor: getUserColor(message.name || '') }
+                      }
                     >
                       {message.type === "system" ? (
                         message.text
