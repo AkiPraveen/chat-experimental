@@ -12,7 +12,7 @@ import { User } from "lucide-react";
 import { getUserColor } from "@/lib/colors";
 
 interface Message {
-  type: "system" | "user";
+  type: "system" | "user" | "ai";
   name?: string;
   text: string;
 }
@@ -115,7 +115,9 @@ export default function Home() {
   }, [activeChannel, userName]);
 
   const sendMessage = () => {
+    console.log("checking send preconditions for message", inputMessage);
     if (!inputMessage.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
+    console.log("sending message", inputMessage);
 
     ws.send(JSON.stringify({
       name: userName,
@@ -181,16 +183,23 @@ export default function Home() {
                       className={`rounded-lg p-2 ${
                         message.type === "system"
                           ? "bg-muted font-medium"
+                          : message.type === "ai"
+                          ? "bg-blue-100 dark:bg-blue-900"
                           : ""
                       }`}
                       style={
-                        message.type === "system"
+                        message.type === "system" || message.type === "ai"
                           ? {}
                           : { backgroundColor: getUserColor(message.name || '') }
                       }
                     >
                       {message.type === "system" ? (
                         message.text
+                      ) : message.type === "ai" ? (
+                        <>
+                          <span className="font-bold text-blue-600 dark:text-blue-300">{message.name}</span>:{' '}
+                          <span className="font-medium">{message.text}</span>
+                        </>
                       ) : (
                         <>
                           <span className="font-medium">{message.name}</span>: {message.text}

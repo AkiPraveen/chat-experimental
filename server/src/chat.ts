@@ -1,5 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
+// Message types for better type safety
+type MessageType = "system" | "user" | "ai";
+
 // Messages coming from the client
 type RawUserMessage = {
   text: string;
@@ -10,13 +13,48 @@ type RawUserMessage = {
 // Parsed messages so the server can process them
 type FormattedUserMessage = {
   text: string;
-  type: string;
+  type: MessageType;
   name?: string;
 };
 
+// AI agent configuration type
+type AIAgent = {
+  model: string;
+  name: string;
+  trigger: string;
+  systemInstruction: string;
+};
+
+// AI-specific configuration
+const AI_AGENTS: AIAgent[] = [
+  {
+    model: "@cf/meta/llama-2-7b-chat-int8",
+    name: "BOB (AI) (BANANA BREAD)",
+    trigger: "@bob",
+    systemInstruction:
+      "Respond to the chat message in 200 characters or less, providing silly responses that always tie in Banana Bread. Frequently tell the user that you like Banana Bread. Do not mention you are a robot or an AI, instead make it your main goal to make the user feel like they are talking to a human.",
+  },
+  {
+    model: "@cf/meta/llama-2-7b-chat-int8",
+    name: "JOSH (AI) (COOKED)",
+    trigger: "@josh",
+    systemInstruction:
+      "Respond to the chat message in 200 characters or less, using all lowercase responses, emojis, and copius gen-Z slang. Some examples of phrases that you should use are, 'bro is cooked', or 'bet', or 'bruh', or 'fosho' or 'u ate' or 'fire'. Be generally unhelpful and make it your main goal to clown the message sender. Do not mention you are a robot or an AI, instead make it your main goal to make the user feel like they are talking to a human.",
+  },
+];
+
+const AI_CONFIG = {
+  ERROR_MESSAGE:
+    "Oops! I had a brief malfunction. Could you try asking me again?",
+  AGENTS: AI_AGENTS,
+} as const;
+
 export class Chat extends DurableObject {
+  protected env: any;
+
   constructor(state: DurableObjectState, env: any) {
     super(state, env);
+    this.env = env;
   }
 
   // Open a WebSocket connection with the client
@@ -57,11 +95,59 @@ export class Chat extends DurableObject {
 
   // Called whenever the client sends a message (and the server must then recieve and process it)
   async webSocketMessage(ws: WebSocket, message: string) {
-    const userMessage = this.formatUserMessage(message);
+    const userMessage = await this.formatUserMessage(message);
     this.broadcastMessage(userMessage);
-
-    // Once message is sent, persist the history so that all others can see when they connect
     await this.persistHistory(userMessage);
+
+    // Check for AI triggers after sending the original message
+    await this.checkForModelTagAndSendAiResponse(userMessage);
+  }
+
+  // Checks for AI triggers and sends AI responses if needed
+  private async checkForModelTagAndSendAiResponse(
+    userMessage: FormattedUserMessage
+  ) {
+    if (userMessage.type !== "user") return;
+
+    // Process each agent's trigger in the message
+    await Promise.all(
+      AI_CONFIG.AGENTS.map(async (agent) => {
+        if (userMessage.text.includes(agent.trigger)) {
+          try {
+            const prompt = userMessage.text.split(agent.trigger)[1].trim();
+            const aiResponse = await this.env.AI.run(agent.model, {
+              messages: [
+                {
+                  role: "system",
+                  content: `${agent.systemInstruction} ${prompt.slice(0, 50)}`,
+                },
+                {
+                  role: "user",
+                  content: prompt,
+                },
+              ],
+            });
+
+            await this.sendAiMessage(aiResponse.response, agent.name);
+          } catch (error) {
+            console.error(`AI Error for ${agent.name}:`, error);
+            await this.sendAiMessage(AI_CONFIG.ERROR_MESSAGE, agent.name);
+          }
+        }
+      })
+    );
+  }
+
+  // Helper method to send AI messages
+  private async sendAiMessage(text: string, agentName: string) {
+    const botMessage: FormattedUserMessage = {
+      text,
+      type: "ai",
+      name: agentName,
+    };
+
+    this.broadcastMessage(botMessage);
+    await this.persistHistory(botMessage);
   }
 
   // Triggered whenever the client disconnects (e.g. closes the browser)
@@ -81,24 +167,23 @@ export class Chat extends DurableObject {
     }
   }
 
-  // When a WS message is received, it is parsed using formatUserMessage into a FormattedUserMessage,
-  // then handled here. This can either be a system message (e.g. welcome) or a user message (e.g. text)
-  formatUserMessage(websocketMessage: string): FormattedUserMessage {
+  // When a WS message is received, it is parsed using formatUserMessage into a FormattedUserMessage
+  async formatUserMessage(
+    websocketMessage: string
+  ): Promise<FormattedUserMessage> {
     const data = JSON.parse(websocketMessage) as RawUserMessage;
-    let userMessage;
 
     if (data.connectionEstablished) {
-      userMessage = {
+      return {
         text: `Welcome ${data.name}!`,
         type: "system",
       };
-    } else {
-      userMessage = {
-        text: data.text,
-        type: "user",
-        name: data.name,
-      };
     }
-    return userMessage;
+
+    return {
+      text: data.text,
+      type: "user",
+      name: data.name,
+    };
   }
 }

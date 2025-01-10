@@ -6,6 +6,7 @@ export { Chat } from "./chat";
 
 type Env = {
   CHATS: DurableObjectNamespace<Chat>;
+  AI: any;
 };
 
 const app = new Hono<{ Bindings: Env }>();
